@@ -1,63 +1,16 @@
-# Privy Expo Starter
+# Run and deploy your AI Studio app
 
-This demonstrates a minimal working installation of the privy sdk in a fresh expo app. We recommend reading the [documentation](https://docs.privy.io/guide/expo/dashboard) for a more detailed guide.
+This contains everything you need to run your app locally.
 
-## Setup
+View your app in AI Studio: https://ai.studio/apps/drive/1bTctWp3DoO3u19o6LJPKaO6T3OvPMLsX?showPreview=true&showCode=true&showAssistant=true
 
-1. Install dependencies
+## Run Locally
 
-   ```sh
-   yarn
-   ```
+**Prerequisites:**  Node.js
 
-2. Configure an app client in your [Dashboard](https://dashboard.privy.io/apps?page=settings&setting=clients), and add your Privy app ID and app client ID in `app.json`
 
-   ```json
-   ...
-    "extra": {
-      "privyAppId": "<your-app-id>",
-      "privyClientId": "<your-client-id>"
-    }
-   ...
-   ```
-
-   If you are using Expo go, be sure to add `host.exp.Exponent` to Allowed app identifiers under app clients in your [Dashboard]('https://dashboard.privy.io/apps?page=settings&setting=clients')
-
-3. Configure your application identifier in `app.json`. This should match the bundle identifier for your app in the app store.
-
-   ```json
-   ...
-    "ios": {
-      "bundleIdentifier": "com.example.myapp"
-    },
-    "android": {
-      "package": "com.example.myapp"
-    }
-   ...
-   ```
-
-4. If you are making use of passkeys, ensure that you have an [associated website](https://docs.privy.io/guide/expo/setup/passkey#_3-update-native-app-settings) for your application. Once you have this your `app.json` should be updated as follows:
-
-   ```json
-   ...
-   "associatedDomains": ["webcredentials:<your-associated-domain>"],
-   ...
-   "extra": {
-      ...
-      "passkeyAssociatedDomain": "https://<your-associated-domain>"
-    },
-   ...
-   ```
-
-## Run the app
-
-```sh
-# expo go
-yarn run start
-
-# ios
-yarn run ios
-
-# android
-yarn run android
-```
+1. Install dependencies:
+   `npm install`
+2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
+3. Run the app:
+   `npx expo start`
