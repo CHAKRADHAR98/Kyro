@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "@privy-io/expo-solana-starter",
+    "name": "Kyro",
     "slug": "kyro",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -20,7 +20,9 @@
       "infoPlist": {
         "NSAppTransportSecurity": {
           "NSAllowsArbitraryLoads": true
-        }
+        },
+        "NSCameraUsageDescription": "This app needs access to the camera to take photos of e-waste items for AI analysis.",
+        "NSPhotoLibraryUsageDescription": "This app needs access to your photo library to select images of e-waste items for AI analysis."
       }
     },
     "android": {
@@ -28,7 +30,12 @@
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "com.test.solanaapp"
+      "package": "com.test.solanaapp",
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE"
+      ]
     },
     "extra": {
       "privyAppId": "cmea18uo900csl80c6z5obyb1",
@@ -51,7 +58,14 @@
         }
       ],
       "expo-font",
-      "expo-web-browser"
+      "expo-web-browser",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "This app needs access to your photo library to select images of e-waste items for AI analysis.",
+          "cameraPermission": "This app needs access to the camera to take photos of e-waste items for AI analysis."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

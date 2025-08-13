@@ -1,51 +1,41 @@
-import { TouchableOpacity, Text, View, StyleSheet, Linking } from "react-native";
-import { LoginWithOAuthInput, useLoginWithOAuth } from "@privy-io/expo";
+import { TouchableOpacity, Text, View, StyleSheet, Linking, ScrollView } from "react-native";
 import { useLogin } from "@privy-io/expo/ui";
 import Constants from "expo-constants";
 import { useState } from "react";
 import * as Application from "expo-application";
+import { createSharedStyles } from "../shared/Styles";
+import { Colors, StyleConstants } from "../constants/Colors";
 
 export default function LoginScreen() {
   const [error, setError] = useState("");
-  
-  
   const { login } = useLogin();
-  
-  // OAuth for Google only
-  const oauth = useLoginWithOAuth({
-    onError: (err) => {
-      console.log(err);
-      setError(JSON.stringify(err.message));
-    },
-  });
+  const sharedStyles = createSharedStyles('light');
 
   return (
-   
     <View style={styles.container}>
-      {/* Header with gradient-like background */}
+      {/* Header with green gradient */}
       <View style={styles.header}>
-        <Text style={styles.appTitle}>💰 Solana Wallet</Text>
-        <Text style={styles.subtitle}>Your Gateway to Web3</Text>
+        <Text style={styles.appTitle}>♻️ EcoCycle</Text>
+        <Text style={styles.subtitle}>Turn E-Waste Into Rewards</Text>
       </View>
 
-      
-      <View style={styles.contentContainer}>
+      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
         {/* Welcome Card */}
-        <View style={styles.welcomeCard}>
-          <Text style={styles.welcomeTitle}>🚀 Welcome!</Text>
-          <Text style={styles.welcomeText}>
-            Create your secure Solana wallet and start your crypto journey
+        <View style={[sharedStyles.cardElevated, styles.welcomeCard]}>
+          <Text style={styles.welcomeTitle}>🌱 Welcome to EcoCycle!</Text>
+          <Text style={[sharedStyles.bodyCenter, styles.welcomeText]}>
+            Schedule e-waste pickups, earn reward points, and help save the planet. 
+            Your crypto wallet is built right in!
           </Text>
         </View>
 
-      
-        {/* Login Options */}
-        <View style={styles.loginCard}>
-          <Text style={styles.loginTitle}>Choose your login method</Text>
+        {/* Login Card */}
+        <View style={[sharedStyles.card, styles.loginCard]}>
+          <Text style={[sharedStyles.heading, styles.loginTitle]}>Get Started</Text>
           
           {/* Email Login */}
           <TouchableOpacity
-            style={styles.emailButton}
+            style={sharedStyles.buttonPrimary}
             onPress={() => {
               login({ loginMethods: ["email"] })
                 .then((session) => {
@@ -57,51 +47,45 @@ export default function LoginScreen() {
                 });
             }}
           >
-            <Text style={styles.emailButtonIcon}>📧</Text>
-            <Text style={styles.emailButtonText}>Continue with Email</Text>
-          </TouchableOpacity>
-
-      
-          {/* Google Login */}
-          <TouchableOpacity
-            style={[styles.googleButton, oauth.state.status === "loading" && styles.disabledButton]}
-            disabled={oauth.state.status === "loading"}
-            onPress={() => oauth.login({ provider: "google" } as LoginWithOAuthInput)}
-          >
-            <Text style={styles.googleButtonIcon}>🔍</Text>
-            <Text style={styles.googleButtonText}>
-              {oauth.state.status === "loading" ? "Authenticating..." : "Continue with Google"}
-            </Text>
+            <Text style={sharedStyles.buttonTextPrimary}>📧 Continue with Email</Text>
           </TouchableOpacity>
         </View>
 
         {/* Features Preview */}
-        <View style={styles.featuresCard}>
-          <Text style={styles.featuresTitle}>✨ What you can do:</Text>
+        <View style={[sharedStyles.card, styles.featuresCard]}>
+          <Text style={[sharedStyles.heading, styles.featuresTitle]}>✨ What you can do:</Text>
           <View style={styles.featuresList}>
             <View style={styles.featureItem}>
-              <Text style={styles.featureIcon}>🔐</Text>
-              <Text style={styles.featureText}>Secure wallet creation</Text>
+              <Text style={styles.featureIcon}>📱</Text>
+              <Text style={[sharedStyles.body, styles.featureText]}>Schedule e-waste pickups</Text>
             </View>
             <View style={styles.featureItem}>
-              <Text style={styles.featureIcon}>💸</Text>
-              <Text style={styles.featureText}>Send & receive SOL</Text>
+              <Text style={styles.featureIcon}>🏆</Text>
+              <Text style={[sharedStyles.body, styles.featureText]}>Earn reward points</Text>
             </View>
             <View style={styles.featureItem}>
-              <Text style={styles.featureIcon}>📊</Text>
-              <Text style={styles.featureText}>Track transactions</Text>
+              <Text style={styles.featureIcon}>🎁</Text>
+              <Text style={[sharedStyles.body, styles.featureText]}>Redeem brand coupons</Text>
             </View>
             <View style={styles.featureItem}>
-              <Text style={styles.featureIcon}>🌐</Text>
-              <Text style={styles.featureText}>Multi-network support</Text>
+              <Text style={styles.featureIcon}>💰</Text>
+              <Text style={[sharedStyles.body, styles.featureText]}>Built-in Solana wallet</Text>
+            </View>
+            <View style={styles.featureItem}>
+              <Text style={styles.featureIcon}>🤖</Text>
+              <Text style={[sharedStyles.body, styles.featureText]}>AI-powered item recognition</Text>
+            </View>
+            <View style={styles.featureItem}>
+              <Text style={styles.featureIcon}>🌍</Text>
+              <Text style={[sharedStyles.body, styles.featureText]}>Help save the environment</Text>
             </View>
           </View>
         </View>
 
         {/* Configuration Info */}
-        <View style={styles.configCard}>
-          <Text style={styles.configTitle}>📱 App Configuration</Text>
-          <Text style={styles.configText}>
+        <View style={[sharedStyles.card, styles.configCard]}>
+          <Text style={[sharedStyles.heading, styles.configTitle]}>📱 App Configuration</Text>
+          <Text style={[sharedStyles.caption, styles.configText]}>
             App ID: {Application.applicationId}
           </Text>
           <TouchableOpacity
@@ -117,19 +101,11 @@ export default function LoginScreen() {
 
         {/* Error Display */}
         {error && (
-          <View style={styles.errorCard}>
-            <Text style={styles.errorIcon}>⚠️</Text>
-            <Text style={styles.errorText}>{error}</Text>
+          <View style={sharedStyles.messageError}>
+            <Text style={sharedStyles.messageTextError}>⚠️ {error}</Text>
           </View>
         )}
-
-        {/* Loading State */}
-        {oauth.state.status === "loading" && (
-          <View style={styles.loadingCard}>
-            <Text style={styles.loadingText}>🔄 Authenticating with Google...</Text>
-          </View>
-        )}
-      </View>
+      </ScrollView>
     </View>
   );
 }
@@ -137,197 +113,84 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f0f4f8',
+    backgroundColor: Colors.light.background,
   },
   header: {
-    backgroundColor: '#667eea',
+    backgroundColor: Colors.light.primary,
     paddingTop: 60,
     paddingBottom: 40,
-    paddingHorizontal: 20,
+    paddingHorizontal: StyleConstants.spacing.lg,
     alignItems: 'center',
   },
   appTitle: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: 'white',
-    marginBottom: 8,
+    fontSize: StyleConstants.fontSize.xxl + 8,
+    fontWeight: StyleConstants.fontWeight.bold,
+    color: Colors.light.lightText,
+    marginBottom: StyleConstants.spacing.sm,
   },
   subtitle: {
-    fontSize: 16,
+    fontSize: StyleConstants.fontSize.md,
     color: 'rgba(255,255,255,0.9)',
   },
-  contentContainer: {
+  scrollView: {
     flex: 1,
-    padding: 20,
+    padding: StyleConstants.spacing.md,
   },
   welcomeCard: {
-    backgroundColor: 'white',
-    borderRadius: 16,
-    padding: 24,
-    marginBottom: 20,
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
+    marginBottom: StyleConstants.spacing.lg,
   },
   welcomeTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#2d3748',
-    marginBottom: 12,
+    fontSize: StyleConstants.fontSize.xl,
+    fontWeight: StyleConstants.fontWeight.bold,
+    color: Colors.light.primary,
+    marginBottom: StyleConstants.spacing.md,
   },
   welcomeText: {
-    fontSize: 16,
-    color: '#718096',
-    textAlign: 'center',
-    lineHeight: 24,
+    marginBottom: StyleConstants.spacing.sm,
   },
   loginCard: {
-    backgroundColor: 'white',
-    borderRadius: 16,
-    padding: 24,
-    marginBottom: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
+    marginBottom: StyleConstants.spacing.lg,
   },
   loginTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#2d3748',
-    marginBottom: 20,
     textAlign: 'center',
   },
-  emailButton: {
-    backgroundColor: '#4299e1',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 12,
-  },
-  emailButtonIcon: {
-    fontSize: 20,
-    marginRight: 12,
-  },
-  emailButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  googleButton: {
-    backgroundColor: '#dc2626',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 16,
-    borderRadius: 12,
-  },
-  googleButtonIcon: {
-    fontSize: 20,
-    marginRight: 12,
-  },
-  googleButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  disabledButton: {
-    backgroundColor: '#a0aec0',
-  },
   featuresCard: {
-    backgroundColor: 'white',
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
+    marginBottom: StyleConstants.spacing.lg,
   },
   featuresTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#2d3748',
-    marginBottom: 16,
+    textAlign: 'center',
   },
   featuresList: {
-    gap: 12,
+    gap: StyleConstants.spacing.md,
   },
   featureItem: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   featureIcon: {
-    fontSize: 20,
-    marginRight: 12,
-    width: 24,
+    fontSize: StyleConstants.fontSize.lg,
+    marginRight: StyleConstants.spacing.md,
+    width: 28,
   },
   featureText: {
-    fontSize: 16,
-    color: '#4a5568',
     flex: 1,
   },
   configCard: {
-    backgroundColor: 'white',
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
+    marginBottom: StyleConstants.spacing.lg,
   },
   configTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#2d3748',
-    marginBottom: 12,
+    textAlign: 'center',
   },
   configText: {
-    fontSize: 12,
-    color: '#718096',
-    marginBottom: 8,
+    marginBottom: StyleConstants.spacing.sm,
     fontFamily: 'monospace',
+    textAlign: 'center',
   },
   configLink: {
-    fontSize: 14,
-    color: '#4299e1',
-    fontWeight: '600',
-  },
-  errorCard: {
-    backgroundColor: '#fed7d7',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 20,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  errorIcon: {
-    fontSize: 20,
-    marginRight: 12,
-  },
-  errorText: {
-    color: '#c53030',
-    fontSize: 14,
-    flex: 1,
-  },
-  loadingCard: {
-    backgroundColor: '#bee3f8',
-    borderRadius: 12,
-    padding: 16,
-    alignItems: 'center',
-  },
-  loadingText: {
-    color: '#2b6cb0',
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: StyleConstants.fontSize.sm,
+    color: Colors.light.primary,
+    fontWeight: StyleConstants.fontWeight.semibold,
+    textAlign: 'center',
   },
 });
