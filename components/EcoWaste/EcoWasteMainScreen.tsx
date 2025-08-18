@@ -9,6 +9,8 @@ import SchedulePickupForm from './SchedulePickupForm';
 import Leaderboard from './Leaderboard';
 import Rewards from './Rewards'; 
 import WalletDrawer from '../Wallet/WalletDrawer';
+import TestDatabaseConnection from '../TestDatabaseConnection';
+
 
 export default function EcoWasteMainScreen() {
   const [isWalletVisible, setIsWalletVisible] = useState(false);
@@ -32,6 +34,7 @@ export default function EcoWasteMainScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={sharedStyles.scrollContainer}
       >
+
         <Hero onScheduleClick={handleScheduleClick} />
         <HowItWorks />
         <SchedulePickupForm />

@@ -40,7 +40,10 @@
     "extra": {
       "privyAppId": "cmea18uo900csl80c6z5obyb1",
       "privyClientId": "client-WY6PnvcfMUcMv3Fa8Ma3CxMKUfSNfptShSz82qmZk2o4s",
-      "passkeyAssociatedDomain": ""
+      "passkeyAssociatedDomain": "",
+      "supabaseUrl": "https://wgcbdaebkezkiyyzsrzb.supabase.co",
+      "supabaseAnonKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndnY2JkYWVia2V6a2l5eXpzcnpiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTU1MTkyODEsImV4cCI6MjA3MTA5NTI4MX0.4AsrfKk6eST1Kn5yNJfJthX90YByUwUwEvNalzpN-pI", 
+      "geminiApiKey": "AIzaSyBmPtfSY4uCv3o1KNNMRjgWVgeaXggbXpc"
     },
     "plugins": [
       "expo-router",

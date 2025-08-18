@@ -10,6 +10,9 @@ import {
 import * as ImagePicker from 'expo-image-picker';
 import { createSharedStyles } from '../../shared/Styles';
 import { Colors, StyleConstants } from '../../constants/Colors';
+import { DatabaseService } from '../../lib/database';
+import { AIService } from '../../lib/aiService';
+import { calculatePoints } from '../../lib/supabase';
 
 const EWASTE_CATEGORIES = [
   'Smartphones & Tablets',
@@ -36,8 +39,15 @@ export default function SchedulePickupForm() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [message, setMessage] = useState<Message | null>(null);
+  const [estimatedPoints, setEstimatedPoints] = useState<number>(0);
 
   const sharedStyles = createSharedStyles('light');
+
+  // Calculate points whenever category or weight changes
+  React.useEffect(() => {
+    const points = calculatePoints(formData.category, formData.weight);
+    setEstimatedPoints(points);
+  }, [formData.category, formData.weight]);
 
   const handleInputChange = (field: string, value: string | number) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -45,7 +55,6 @@ export default function SchedulePickupForm() {
 
   const pickImage = useCallback(async () => {
     try {
-      // Request permission
       const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
       
       if (permissionResult.granted === false) {
@@ -53,17 +62,16 @@ export default function SchedulePickupForm() {
         return;
       }
 
-      // Launch image picker
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
         aspect: [4, 3],
-        quality: 1,
+        quality: 0.8, // Reduce quality for faster upload
       });
 
       if (!result.canceled && result.assets[0]) {
         setFormData(prev => ({ ...prev, photo: result.assets[0] }));
-        analyzeImage(result.assets[0]);
+        setMessage({ type: 'info', text: 'Photo selected. Ready for verification!' });
       }
     } catch (error) {
       console.error('Error picking image:', error);
@@ -71,73 +79,130 @@ export default function SchedulePickupForm() {
     }
   }, []);
 
-  const analyzeImage = useCallback(async (asset: ImagePicker.ImagePickerAsset) => {
+  const analyzeAndVerifyImage = useCallback(async (photoUri: string) => {
     setIsAnalyzing(true);
-    setMessage({ type: 'info', text: 'AI is analyzing your e-waste... 🤖' });
+    setMessage({ type: 'info', text: 'AI is verifying your e-waste... 🤖' });
     
     try {
-      // Note: In a real implementation, you would:
-      // 1. Upload the image to your backend
-      // 2. Process it with Gemini API on your server
-      // 3. Return the results
-      // For this demo, we'll simulate the analysis
+      // Convert image to base64
+      const base64Image = await AIService.imageUriToBase64(photoUri);
       
-      await new Promise(resolve => setTimeout(resolve, 2000)); // Simulate API call
+      // Get AI verification
+      const { success, result, error } = await AIService.verifyEWaste(
+        base64Image, 
+        formData.category
+      );
       
-      // Mock AI response
-      const mockAnalysis = {
-        category: EWASTE_CATEGORIES[Math.floor(Math.random() * EWASTE_CATEGORIES.length)],
-        estimatedWeight: Math.floor(Math.random() * 20) + 1,
-      };
+      if (!success || !result) {
+        throw new Error(error || 'AI verification failed');
+      }
       
-      setFormData(prev => ({
-        ...prev,
-        category: mockAnalysis.category,
-        weight: mockAnalysis.estimatedWeight,
-      }));
-      
-      setMessage({ type: 'success', text: 'AI analysis complete! Please verify the details.' });
+      if (result.isVerified) {
+        setMessage({ 
+          type: 'success', 
+          text: `✅ Verification successful! Confidence: ${result.confidence}%` 
+        });
+        return { verified: true, aiResult: result };
+      } else {
+        setMessage({ 
+          type: 'error', 
+          text: `❌ Verification failed: ${result.reasoning}` 
+        });
+        return { verified: false, aiResult: result };
+      }
     } catch (error) {
-      console.error('Error analyzing image:', error);
-      setMessage({ type: 'error', text: 'AI analysis failed. Please enter details manually.' });
+      console.error('Error during AI verification:', error);
+      setMessage({ 
+        type: 'error', 
+        text: 'AI verification failed. Please try again or contact support.' 
+      });
+      return { verified: false, aiResult: null };
     } finally {
       setIsAnalyzing(false);
     }
-  }, []);
+  }, [formData.category]);
 
   const handleSubmit = useCallback(async () => {
-    if (!formData.name || !formData.address) {
+    // Validation
+    if (!formData.name.trim() || !formData.address.trim()) {
       Alert.alert('Missing Information', 'Please fill in all required fields');
       return;
     }
 
+    if (!formData.photo) {
+      Alert.alert('Photo Required', 'Please upload a photo for verification');
+      return;
+    }
+
     setIsSubmitting(true);
-    setMessage({ type: 'info', text: 'Submitting your request...' });
+    setMessage({ type: 'info', text: 'Processing your request...' });
 
     try {
-      // Mock API call - in real implementation, send to your backend
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      
-      console.log('Form Submitted:', formData);
-      
-      setMessage({ type: 'success', text: 'Success! Your pickup is scheduled. We will contact you shortly.' });
-      
-      // Reset form
-      setFormData({
-        name: '',
-        address: '',
-        category: EWASTE_CATEGORIES[0],
-        weight: 5,
-        photo: null,
+      // Step 1: Create pickup request in database
+      const createResult = await DatabaseService.createPickupRequest({
+        user_name: formData.name.trim(),
+        user_address: formData.address.trim(),
+        waste_type: formData.category,
+        quantity_kg: formData.weight,
       });
-      
+
+      if (!createResult.success || !createResult.data) {
+        throw new Error(createResult.error || 'Failed to create pickup request');
+      }
+
+      const pickupRequestId = createResult.data.id!;
+
+      // Step 2: Verify image with AI
+      const { verified, aiResult } = await analyzeAndVerifyImage(formData.photo.uri);
+
+      // Step 3: Update pickup request with verification result
+      const updateResult = await DatabaseService.updatePickupVerification(
+        pickupRequestId,
+        verified ? 'verified' : 'rejected',
+        aiResult
+      );
+
+      if (!updateResult.success) {
+        throw new Error(updateResult.error || 'Failed to update verification');
+      }
+
+      // Step 4: Show success message
+      if (verified) {
+        setMessage({ 
+          type: 'success', 
+          text: `🎉 Success! Your pickup is scheduled and you've earned ${estimatedPoints} points!` 
+        });
+        
+        // Reset form
+        setFormData({
+          name: '',
+          address: '',
+          category: EWASTE_CATEGORIES[0],
+          weight: 5,
+          photo: null,
+        });
+        
+        Alert.alert(
+          'Pickup Scheduled!', 
+          `Your e-waste pickup has been verified and scheduled.\n\nPoints earned: ${estimatedPoints}\n\nWe will contact you shortly to arrange the pickup.`
+        );
+      } else {
+        setMessage({ 
+          type: 'error', 
+          text: 'Verification failed. Your pickup request has been recorded but points will not be awarded until verification passes.' 
+        });
+      }
+
     } catch (error) {
       console.error('Error submitting form:', error);
-      setMessage({ type: 'error', text: 'Failed to submit request. Please try again.' });
+      setMessage({ 
+        type: 'error', 
+        text: error instanceof Error ? error.message : 'Failed to submit request. Please try again.' 
+      });
     } finally {
       setIsSubmitting(false);
     }
-  }, [formData]);
+  }, [formData, estimatedPoints, analyzeAndVerifyImage]);
 
   const renderMessage = () => {
     if (!message) return null;
@@ -193,25 +258,6 @@ export default function SchedulePickupForm() {
           />
         </View>
 
-        {/* Photo Upload */}
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>Upload Photo (Optional, for AI analysis)</Text>
-          <TouchableOpacity 
-            style={styles.photoUploadButton} 
-            onPress={pickImage}
-            disabled={isAnalyzing}
-          >
-            <Text style={styles.photoUploadText}>
-              {isAnalyzing 
-                ? '🤖 Analyzing...' 
-                : formData.photo 
-                ? `📷 Selected: ${formData.photo.fileName || 'Image'}` 
-                : '📷 Click to upload an image'
-              }
-            </Text>
-          </TouchableOpacity>
-        </View>
-
         {/* Category Picker */}
         <View style={styles.inputGroup}>
           <Text style={styles.label}>E-Waste Category</Text>
@@ -260,6 +306,30 @@ export default function SchedulePickupForm() {
           </View>
         </View>
 
+        {/* Points Preview */}
+        <View style={styles.pointsPreview}>
+          <Text style={styles.pointsText}>
+            🏆 Estimated Points: {estimatedPoints}
+          </Text>
+        </View>
+
+        {/* Photo Upload */}
+        <View style={styles.inputGroup}>
+          <Text style={styles.label}>Upload Photo for Verification *</Text>
+          <TouchableOpacity 
+            style={styles.photoUploadButton} 
+            onPress={pickImage}
+            disabled={isAnalyzing || isSubmitting}
+          >
+            <Text style={styles.photoUploadText}>
+              {formData.photo 
+                ? `📷 Selected: ${formData.photo.fileName || 'Image'}` 
+                : '📷 Click to upload an image'
+              }
+            </Text>
+          </TouchableOpacity>
+        </View>
+
         {/* Message Display */}
         {renderMessage()}
 
@@ -267,13 +337,17 @@ export default function SchedulePickupForm() {
         <TouchableOpacity
           style={[
             sharedStyles.buttonPrimary,
-            (isSubmitting || isAnalyzing) && sharedStyles.buttonDisabled
+            (isSubmitting || isAnalyzing || !formData.photo) && sharedStyles.buttonDisabled
           ]}
           onPress={handleSubmit}
-          disabled={isSubmitting || isAnalyzing}
+          disabled={isSubmitting || isAnalyzing || !formData.photo}
         >
           <Text style={sharedStyles.buttonTextPrimary}>
-            {isSubmitting ? '🕒 Submitting...' : '📱 Request Pickup'}
+            {isSubmitting 
+              ? '🕒 Processing...' 
+              : isAnalyzing 
+              ? '🤖 Analyzing...' 
+              : '📱 Request Pickup'}
           </Text>
         </TouchableOpacity>
       </View>
@@ -366,5 +440,17 @@ const styles = StyleSheet.create({
   },
   weightButtonTextActive: {
     color: Colors.light.lightText,
+  },
+  pointsPreview: {
+    backgroundColor: 'rgba(76, 175, 80, 0.1)',
+    padding: StyleConstants.spacing.md,
+    borderRadius: StyleConstants.borderRadius,
+    marginBottom: StyleConstants.spacing.md,
+    alignItems: 'center',
+  },
+  pointsText: {
+    fontSize: StyleConstants.fontSize.lg,
+    fontWeight: StyleConstants.fontWeight.semibold,
+    color: Colors.light.primary,
   },
 });
