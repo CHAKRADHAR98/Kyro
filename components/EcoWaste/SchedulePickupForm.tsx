@@ -13,6 +13,7 @@ import { Colors, StyleConstants } from '../../constants/Colors';
 import { DatabaseService } from '../../lib/database';
 import { AIService } from '../../lib/aiService';
 import { calculatePoints } from '../../lib/supabase';
+import { usePrivy } from '@privy-io/expo';
 
 const EWASTE_CATEGORIES = [
   'Smartphones & Tablets',
@@ -42,6 +43,42 @@ export default function SchedulePickupForm() {
   const [estimatedPoints, setEstimatedPoints] = useState<number>(0);
 
   const sharedStyles = createSharedStyles('light');
+  const { user } = usePrivy();
+
+  // Get current user name (same logic as other components)
+  const getCurrentUserName = (): string => {
+    if (user?.linked_accounts) {
+      const emailAccount = user.linked_accounts.find(account => account.type === 'email');
+      if (emailAccount && 'address' in emailAccount && emailAccount.address) {
+        const email = emailAccount.address;
+        const namePart = email.split('@')[0];
+        
+        if (namePart.includes('.')) {
+          return namePart.split('.').map(part => 
+            part.charAt(0).toUpperCase() + part.slice(1).toLowerCase()
+          ).join(' ');
+        }
+        
+        return namePart.charAt(0).toUpperCase() + namePart.slice(1).toLowerCase();
+      }
+      
+      const firstAccount = user.linked_accounts[0];
+      if (firstAccount) {
+        if ('phoneNumber' in firstAccount && firstAccount.phoneNumber) return firstAccount.phoneNumber;
+        if ('username' in firstAccount && firstAccount.username) return firstAccount.username;
+        if ('custom_user_id' in firstAccount && firstAccount.custom_user_id) return firstAccount.custom_user_id;
+        if ('address' in firstAccount && firstAccount.address) return firstAccount.address;
+      }
+    }
+    
+    return 'Komati Chakradhar'; // Fallback to your database entry
+  };
+
+  // Auto-fill user name when component loads
+  React.useEffect(() => {
+    const userName = getCurrentUserName();
+    setFormData(prev => ({ ...prev, name: userName }));
+  }, [user]);
 
   // Calculate points whenever category or weight changes
   React.useEffect(() => {
