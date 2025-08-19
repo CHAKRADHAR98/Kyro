@@ -34,16 +34,23 @@
       "permissions": [
         "android.permission.CAMERA",
         "android.permission.READ_EXTERNAL_STORAGE",
-        "android.permission.WRITE_EXTERNAL_STORAGE"
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.INTERNET",
+        "android.permission.RECORD_AUDIO"
       ]
     },
     "extra": {
-      "privyAppId": "YOUR_PRIVY_APP_ID_HERE",
-      "privyClientId": "YOUR_PRIVY_CLIENT_ID_HERE",
-      "supabaseUrl": "YOUR_SUPABASE_URL_HERE",
-      "supabaseAnonKey": "YOUR_SUPABASE_ANON_KEY_HERE",
-      "geminiApiKey": "YOUR_GEMINI_API_KEY_HERE",
-      "passkeyAssociatedDomain": ""
+      "EXPO_PUBLIC_SUPABASE_URL": "your_supabase_url_here",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "your_supabase_anon_key_here",
+        "SUPABASE_SERVICE_ROLE_KEY": "your_supabase_service_role_key_here",
+        "EXPO_PUBLIC_PRIVY_APP_ID": "your_privy_app_id_here",
+        "EXPO_PUBLIC_PRIVY_CLIENT_ID": "your_privy_client_id_here",
+        "EXPO_PUBLIC_PASSKEY_ASSOCIATED_DOMAIN": "your_passkey_domain_here",
+        "EXPO_PUBLIC_GEMINI_API_KEY": "your_gemini_api_key_here"
+      },
+      "router": {},
+      "eas": {
+        "projectId": "your_project_id_here"
     },
     "plugins": [
       "expo-router",
@@ -56,7 +63,8 @@
             "deploymentTarget": "17.5"
           },
           "android": {
-            "compileSdkVersion": 35
+            "compileSdkVersion": 35,
+            "targetSdkVersion": 35
           }
         }
       ],
