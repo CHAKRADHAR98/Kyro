@@ -1,12 +1,51 @@
 import { supabase, PickupRequest, UserPoints, calculatePoints } from './supabase';
+import { decode } from 'base64-arraybuffer';
 
 export class DatabaseService {
+  
+  /**
+   * Uploads a base64 image to Supabase Storage
+   * returns the public URL of the uploaded image
+   */
+  static async uploadImage(base64Image: string): Promise<string | null> {
+    try {
+      // Generate a unique filename: timestamp + random string
+      const fileName = `pickup-${Date.now()}-${Math.random().toString(36).substring(7)}.jpg`;
+      
+      // Upload to 'waste-images' bucket
+      const { data, error } = await supabase
+        .storage
+        .from('waste-images')
+        .upload(fileName, decode(base64Image), {
+          contentType: 'image/jpeg',
+          upsert: false
+        });
+
+      if (error) {
+        console.error('Supabase Storage Upload Error:', error);
+        return null;
+      }
+
+      // Get the public URL
+      const { data: { publicUrl } } = supabase
+        .storage
+        .from('waste-images')
+        .getPublicUrl(fileName);
+
+      return publicUrl;
+    } catch (error) {
+      console.error('Image upload exception:', error);
+      return null;
+    }
+  }
+
   // Create a new pickup request
   static async createPickupRequest(data: {
     user_name: string;
     user_address: string;
     waste_type: string;
     quantity_kg: number;
+    image_url?: string; // <--- ADDED THIS
   }): Promise<{ success: boolean; data?: PickupRequest; error?: string }> {
     try {
       const calculated_points = calculatePoints(data.waste_type, data.quantity_kg);

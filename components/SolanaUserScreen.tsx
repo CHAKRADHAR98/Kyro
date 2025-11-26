@@ -1,5 +1,14 @@
 import React, { useState, useCallback, useEffect } from "react";
-import { Text, TextInput, View, TouchableOpacity, ScrollView, Alert, StyleSheet } from "react-native";
+import { 
+  Text, 
+  TextInput, 
+  View, 
+  TouchableOpacity, 
+  ScrollView, 
+  Alert, 
+  StyleSheet,
+  Linking 
+} from "react-native";
 import { 
   Connection, 
   LAMPORTS_PER_SOL, 
@@ -8,32 +17,11 @@ import {
   SystemProgram
 } from "@solana/web3.js";
 import * as Clipboard from 'expo-clipboard';
-
 import {
   usePrivy,
   useEmbeddedSolanaWallet,
   getUserEmbeddedSolanaWallet,
-  useLinkWithOAuth,
 } from "@privy-io/expo";
-import Constants from "expo-constants";
-import { PrivyUser } from "@privy-io/public-api";
-
-// Helper function to get main identifier from linked accounts
-const toMainIdentifier = (x: PrivyUser["linked_accounts"][number]) => {
-  if (x.type === "phone") {
-    return x.phoneNumber;
-  }
-  if (x.type === "email" || x.type === "wallet") {
-    return x.address;
-  }
-  if (x.type === "twitter_oauth" || x.type === "tiktok_oauth") {
-    return x.username;
-  }
-  if (x.type === "custom_auth") {
-    return x.custom_user_id;
-  }
-  return x.type;
-};
 
 // Solana network configuration
 const SOLANA_NETWORKS = {
@@ -43,37 +31,28 @@ const SOLANA_NETWORKS = {
 };
 
 export const SolanaUserScreen = () => {
-  // State for managing network, transactions, and UI
-  const [currentNetwork, setCurrentNetwork] = useState<keyof typeof SOLANA_NETWORKS>("devnet");
-  const [signedMessages, setSignedMessages] = useState<string[]>([]);
+  // CHANGED: Default to "testnet" which is often more stable than "devnet"
+  const [currentNetwork, setCurrentNetwork] = useState<keyof typeof SOLANA_NETWORKS>("testnet");
   const [transactionHistory, setTransactionHistory] = useState<string[]>([]);
   const [recipientAddress, setRecipientAddress] = useState("");
   const [solAmount, setSolAmount] = useState("0.001");
   const [walletBalance, setWalletBalance] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
 
-  // Privy hooks for authentication and wallet management
   const { logout, user } = usePrivy();
-  const oauth = useLinkWithOAuth();
   const { wallets, create } = useEmbeddedSolanaWallet();
-  
-  // Get the user's Solana wallet
   const account = getUserEmbeddedSolanaWallet(user);
 
-  // Copy wallet address to clipboard
   const copyWalletAddress = useCallback(async () => {
     if (!account?.address) return;
-    
     try {
       await Clipboard.setStringAsync(account.address);
       Alert.alert("🎉 Copied!", "Wallet address copied to clipboard");
     } catch (error) {
       console.error("Error copying to clipboard:", error);
-      Alert.alert("❌ Error", "Failed to copy address");
     }
   }, [account?.address]);
 
-  // Get wallet balance
   const getBalance = useCallback(async () => {
     if (!account?.address) return;
     
@@ -82,13 +61,17 @@ export const SolanaUserScreen = () => {
       const publicKey = new PublicKey(account.address);
       const balance = await connection.getBalance(publicKey);
       setWalletBalance(balance / LAMPORTS_PER_SOL);
-    } catch (error) {
+    } catch (error: any) {
+      // Silently fail on 429/Network errors to avoid annoying the user
+      const errStr = String(error);
+      if (errStr.includes("429") || errStr.includes("Network request failed")) {
+        console.log(`[Silent] Balance fetch skipped due to network limit (${currentNetwork})`);
+        return;
+      }
       console.error("Error fetching balance:", error);
-      Alert.alert("❌ Error", "Failed to fetch wallet balance");
     }
   }, [account?.address, currentNetwork]);
 
-  // Request airdrop for testing
   const requestAirdrop = useCallback(async () => {
     if (!account?.address || currentNetwork === "mainnet") {
       Alert.alert("ℹ️ Info", "Airdrop only available on devnet/testnet");
@@ -100,6 +83,7 @@ export const SolanaUserScreen = () => {
       const connection = new Connection(SOLANA_NETWORKS[currentNetwork], "confirmed");
       const publicKey = new PublicKey(account.address);
       
+      console.log("Requesting airdrop...");
       const signature = await connection.requestAirdrop(publicKey, 1 * LAMPORTS_PER_SOL);
       await connection.confirmTransaction(signature);
       
@@ -109,71 +93,40 @@ export const SolanaUserScreen = () => {
         await getBalance();
       }, 2000);
       
-    } catch (error) {
-      console.error("Error requesting airdrop:", error);
-      Alert.alert("❌ Error", "Failed to request airdrop. Try again later.");
+    } catch (error: any) {
+      console.log("Airdrop error details:", error);
+      const errorString = String(error);
+      
+      if (errorString.includes("429") || errorString.includes("limit")) {
+        Alert.alert(
+          "⏳ Faucet Limit", 
+          "The public faucet is overloaded. Please try again in 24 hours."
+        );
+      } else {
+        // Offer web alternative if in-app fails
+        Alert.alert(
+          "⚠️ Request Failed",
+          "The in-app faucet is struggling. Try the web faucet?",
+          [
+            { text: "Cancel", style: "cancel" },
+            { 
+              text: "Open Web Faucet", 
+              onPress: () => Linking.openURL("https://faucet.solana.com/") 
+            }
+          ]
+        );
+      }
     } finally {
       setLoading(false);
     }
   }, [account?.address, currentNetwork, getBalance]);
 
-  // Sign a message
-  const signMessage = useCallback(async () => {
-    if (!wallets || wallets.length === 0 || !account?.address) {
-      Alert.alert("❌ Error", "No wallet found. Please create a wallet first.");
-      return;
-    }
-    
-    setLoading(true);
-    try {
-      const provider = await wallets[0].getProvider();
-      const message = `Hello Solana! Signed at ${new Date().toISOString()}`;
-      
-      const result = await provider.request({
-        method: "signMessage",
-        params: { message },
-      });
-      
-      if (result.signature) {
-        const newSignedMessage = `${message} | ${result.signature.slice(0, 20)}...`;
-        setSignedMessages((prev) => [newSignedMessage, ...prev]);
-        Alert.alert("✅ Success!", "Message signed successfully!");
-      }
-    } catch (error) {
-      console.error("Error signing message:", error);
-      Alert.alert("❌ Error", "Failed to sign message.");
-    } finally {
-      setLoading(false);
-    }
-  }, [wallets, account?.address]);
-
-  // Validate Solana address
-  const isValidSolanaAddress = (address: string): boolean => {
-    try {
-      new PublicKey(address);
-      return true;
-    } catch {
-      return false;
-    }
-  };
-
-  // Send SOL transaction
   const sendSolTransaction = useCallback(async () => {
     if (!wallets || wallets.length === 0 || !account?.address || !recipientAddress || !solAmount) {
-      Alert.alert("❌ Error", "Please fill all fields and ensure wallet is created");
+      Alert.alert("❌ Error", "Please fill all fields");
       return;
     }
 
-    if (!isValidSolanaAddress(recipientAddress)) {
-      Alert.alert("❌ Error", "Invalid recipient address format");
-      return;
-    }
-
-    if (parseFloat(solAmount) <= 0) {
-      Alert.alert("❌ Error", "Amount must be greater than 0");
-      return;
-    }
-    
     setLoading(true);
     try {
       const provider = await wallets[0].getProvider();
@@ -203,88 +156,49 @@ export const SolanaUserScreen = () => {
       });
       
       if (result && result.signature) {
-        const newTransaction = `Sent ${solAmount} SOL to ${recipientAddress.slice(0, 8)}... | ${result.signature.slice(0, 20)}...`;
+        const newTransaction = `Sent ${solAmount} SOL | ${result.signature.slice(0, 20)}...`;
         setTransactionHistory((prev) => [newTransaction, ...prev]);
-        
         setRecipientAddress("");
         setSolAmount("0.001");
         
-        setTimeout(async () => {
-          await getBalance();
-        }, 3000);
-        
-        Alert.alert(
-          "🚀 Transaction Sent!", 
-          `Successfully sent ${solAmount} SOL\n\nSignature: ${result.signature.slice(0, 20)}...`
-        );
+        setTimeout(getBalance, 3000);
+        Alert.alert("🚀 Sent!", "Transaction successful");
       }
     } catch (error) {
       console.error("Error sending transaction:", error);
-      
-      let errorMessage = "Failed to send transaction";
-      if (error instanceof Error) {
-        if (error.message.includes("insufficient")) {
-          errorMessage = "💸 Insufficient balance for transaction";
-        } else if (error.message.includes("blockhash")) {
-          errorMessage = "🌐 Network error. Please try again";
-        } else {
-          errorMessage = `❌ Transaction failed: ${error.message}`;
-        }
-      }
-      
-      Alert.alert("Transaction Failed", errorMessage);
+      Alert.alert("Transaction Failed", "Check balance and connection");
     } finally {
       setLoading(false);
     }
   }, [wallets, account?.address, recipientAddress, solAmount, currentNetwork, getBalance]);
 
-  // Switch networks
-  const switchNetwork = useCallback(async (network: keyof typeof SOLANA_NETWORKS) => {
-    setCurrentNetwork(network);
-    setWalletBalance(null);
-    
-    if (account?.address) {
-      setTimeout(() => {
-        getBalance();
-      }, 1000);
-    }
-  }, [account?.address, getBalance]);
-
-  // Create wallet
   const createWallet = useCallback(async () => {
-    if (!create) {
-      Alert.alert("❌ Error", "Wallet creation not available");
-      return;
-    }
-    
+    if (!create) return;
     setLoading(true);
     try {
       await create();
-      setTimeout(() => {
-        getBalance();
-      }, 2000);
+      setTimeout(getBalance, 2000);
     } catch (error) {
       console.error("Error creating wallet:", error);
-      Alert.alert("❌ Error", "Failed to create wallet");
     } finally {
       setLoading(false);
     }
   }, [create, getBalance]);
 
-  // Auto-fetch balance
+  // Auto-fetch balance with a slight delay to prevent race conditions on mount
   useEffect(() => {
     if (account?.address) {
-      getBalance();
+      const timer = setTimeout(() => {
+        getBalance();
+      }, 1000); // 1-second delay before fetching
+      return () => clearTimeout(timer);
     }
   }, [account?.address, currentNetwork, getBalance]);
 
-  if (!user) {
-    return null;
-  }
+  if (!user) return null;
 
   return (
     <View style={styles.container}>
-      {/* Header with gradient background */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>💰 Solana Wallet</Text>
         <View style={styles.networkBadge}>
@@ -297,7 +211,7 @@ export const SolanaUserScreen = () => {
         <View style={styles.balanceCard}>
           <Text style={styles.balanceLabel}>Your Balance</Text>
           <Text style={styles.balanceAmount}>
-            {walletBalance !== null ? `${walletBalance.toFixed(4)} SOL` : "Loading..."}
+            {walletBalance !== null ? `${walletBalance.toFixed(4)} SOL` : "---"}
           </Text>
           {account?.address && (
             <TouchableOpacity style={styles.refreshButton} onPress={getBalance}>
@@ -312,7 +226,7 @@ export const SolanaUserScreen = () => {
           {account?.address ? (
             <View>
               <View style={styles.addressContainer}>
-                <Text style={styles.addressText} numberOfLines={2}>
+                <Text style={styles.addressText} numberOfLines={1} ellipsizeMode="middle">
                   {account.address}
                 </Text>
               </View>
@@ -328,7 +242,7 @@ export const SolanaUserScreen = () => {
                   disabled={loading}
                 >
                   <Text style={styles.secondaryButtonText}>
-                    {loading ? "🕒 Getting SOL..." : "🪂 Get Test SOL"}
+                    {loading ? "Wait..." : "🪂 Get Test SOL"}
                   </Text>
                 </TouchableOpacity>
               )}
@@ -340,7 +254,7 @@ export const SolanaUserScreen = () => {
               disabled={loading}
             >
               <Text style={styles.primaryButtonText}>
-                {loading ? "🕒 Creating..." : "✨ Create Wallet"}
+                {loading ? "Creating..." : "✨ Create Wallet"}
               </Text>
             </TouchableOpacity>
           )}
@@ -348,7 +262,7 @@ export const SolanaUserScreen = () => {
 
         {/* Network Selection */}
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>🌐 Network Selection</Text>
+          <Text style={styles.cardTitle}>🌐 Network</Text>
           <View style={styles.networkButtons}>
             {Object.keys(SOLANA_NETWORKS).map((network) => (
               <TouchableOpacity
@@ -357,14 +271,17 @@ export const SolanaUserScreen = () => {
                   styles.networkButton,
                   currentNetwork === network && styles.activeNetworkButton
                 ]}
-                onPress={() => switchNetwork(network as keyof typeof SOLANA_NETWORKS)}
+                onPress={() => {
+                  setCurrentNetwork(network as keyof typeof SOLANA_NETWORKS);
+                  setWalletBalance(null);
+                }}
                 disabled={currentNetwork === network}
               >
                 <Text style={[
                   styles.networkButtonText,
                   currentNetwork === network && styles.activeNetworkButtonText
                 ]}>
-                  {network} {currentNetwork === network ? "✓" : ""}
+                  {network}
                 </Text>
               </TouchableOpacity>
             ))}
@@ -377,14 +294,14 @@ export const SolanaUserScreen = () => {
           <TextInput
             value={recipientAddress}
             onChangeText={setRecipientAddress}
-            placeholder="Recipient address (e.g., 9WzDXw...)"
+            placeholder="Recipient Address"
             style={styles.textInput}
             placeholderTextColor="#999"
           />
           <TextInput
             value={solAmount}
             onChangeText={setSolAmount}
-            placeholder="Amount in SOL"
+            placeholder="Amount"
             keyboardType="numeric"
             style={styles.textInput}
             placeholderTextColor="#999"
@@ -398,26 +315,11 @@ export const SolanaUserScreen = () => {
             disabled={!recipientAddress || !account?.address || loading}
           >
             <Text style={styles.sendButtonText}>
-              {loading ? "🕒 Sending..." : "🚀 Send SOL"}
+              {loading ? "Sending..." : "🚀 Send SOL"}
             </Text>
           </TouchableOpacity>
         </View>
 
-        {/* Transaction History */}
-        {transactionHistory.length > 0 && (
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>📜 Recent Transactions</Text>
-            {transactionHistory.slice(0, 5).map((tx, index) => (
-              <View key={index} style={styles.transactionItem}>
-                <Text style={styles.transactionText} numberOfLines={2}>
-                  {tx}
-                </Text>
-              </View>
-            ))}
-          </View>
-        )}
-
-        {/* Logout */}
         <TouchableOpacity style={styles.logoutButton} onPress={logout}>
           <Text style={styles.logoutButtonText}>🚪 Logout</Text>
         </TouchableOpacity>
@@ -432,7 +334,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#f0f4f8',
   },
   header: {
-    backgroundColor: '#667eea',
+    backgroundColor: '#2E7D32',
     padding: 20,
     paddingTop: 50,
     flexDirection: 'row',
@@ -521,7 +423,7 @@ const styles = StyleSheet.create({
     color: '#4a5568',
   },
   primaryButton: {
-    backgroundColor: '#4299e1',
+    backgroundColor: '#2E7D32',
     padding: 16,
     borderRadius: 12,
     alignItems: 'center',
@@ -533,13 +435,13 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   secondaryButton: {
-    backgroundColor: '#38b2ac',
+    backgroundColor: '#FFC107',
     padding: 16,
     borderRadius: 12,
     alignItems: 'center',
   },
   secondaryButtonText: {
-    color: 'white',
+    color: '#333',
     fontSize: 16,
     fontWeight: 'bold',
   },
@@ -556,7 +458,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   activeNetworkButton: {
-    backgroundColor: '#4299e1',
+    backgroundColor: '#2E7D32',
   },
   networkButtonText: {
     color: '#4a5568',
@@ -575,7 +477,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   sendButton: {
-    backgroundColor: '#48bb78',
+    backgroundColor: '#2E7D32',
     padding: 16,
     borderRadius: 12,
     alignItems: 'center',
@@ -588,24 +490,13 @@ const styles = StyleSheet.create({
   disabledButton: {
     backgroundColor: '#a0aec0',
   },
-  transactionItem: {
-    backgroundColor: '#f7fafc',
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 8,
-  },
-  transactionText: {
-    fontFamily: 'monospace',
-    fontSize: 12,
-    color: '#4a5568',
-  },
   logoutButton: {
     backgroundColor: '#e53e3e',
     padding: 16,
     borderRadius: 12,
     alignItems: 'center',
     marginTop: 20,
-    marginBottom: 40,
+    marginBottom: 60,
   },
   logoutButtonText: {
     color: 'white',

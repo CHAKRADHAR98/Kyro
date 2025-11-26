@@ -15,14 +15,14 @@ export default function LoginScreen() {
     <View style={styles.container}>
       {/* Header with green gradient */}
       <View style={styles.header}>
-        <Text style={styles.appTitle}>♻️ EcoCycle</Text>
+        <Text style={styles.appTitle}>Kyro</Text>
         <Text style={styles.subtitle}>Turn E-Waste Into Rewards</Text>
       </View>
 
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
         {/* Welcome Card */}
         <View style={[sharedStyles.cardElevated, styles.welcomeCard]}>
-          <Text style={styles.welcomeTitle}>🌱 Welcome to EcoCycle!</Text>
+          <Text style={styles.welcomeTitle}>🌱 Welcome to Kyro!</Text>
           <Text style={[sharedStyles.bodyCenter, styles.welcomeText]}>
             Schedule e-waste pickups, earn reward points, and help save the planet. 
             Your crypto wallet is built right in!
@@ -47,7 +47,7 @@ export default function LoginScreen() {
                 });
             }}
           >
-            <Text style={sharedStyles.buttonTextPrimary}>📧 Continue with Email</Text>
+            <Text style={sharedStyles.buttonTextPrimary}>Continue with Email</Text>
           </TouchableOpacity>
         </View>
 
@@ -81,30 +81,6 @@ export default function LoginScreen() {
             </View>
           </View>
         </View>
-
-        {/* Configuration Info */}
-        <View style={[sharedStyles.card, styles.configCard]}>
-          <Text style={[sharedStyles.heading, styles.configTitle]}>📱 App Configuration</Text>
-          <Text style={[sharedStyles.caption, styles.configText]}>
-            App ID: {Application.applicationId}
-          </Text>
-          <TouchableOpacity
-            onPress={() =>
-              Linking.openURL(
-                `https://dashboard.privy.io/apps/${Constants.expoConfig?.extra?.privyAppId}/settings?setting=clients`
-              )
-            }
-          >
-            <Text style={styles.configLink}>🔧 Configure Dashboard</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Error Display */}
-        {error && (
-          <View style={sharedStyles.messageError}>
-            <Text style={sharedStyles.messageTextError}>⚠️ {error}</Text>
-          </View>
-        )}
       </ScrollView>
     </View>
   );

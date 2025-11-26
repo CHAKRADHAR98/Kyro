@@ -1,37 +1,39 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ImageBackground } from 'react-native';
-import { createSharedStyles } from '../../shared/Styles';
-import { Colors, StyleConstants } from '../../constants/Colors';
+import { View, Text, TouchableOpacity, StyleSheet, ImageBackground, Dimensions } from 'react-native';
+import { Colors } from '../../constants/Colors';
 
 interface HeroProps {
   onScheduleClick: () => void;
 }
 
-export default function Hero({ onScheduleClick }: HeroProps) {
-  const sharedStyles = createSharedStyles('light');
+const { width } = Dimensions.get('window');
 
+export default function Hero({ onScheduleClick }: HeroProps) {
   return (
-    <View style={styles.heroContainer}>
+    <View style={styles.container}>
       <ImageBackground
         source={{
           uri: 'https://images.unsplash.com/photo-1611284446314-60a58ac0deb9?q=80&w=2070&auto=format&fit=crop'
         }}
         style={styles.backgroundImage}
-        imageStyle={styles.imageStyle}
       >
         <View style={styles.overlay}>
-          <View style={styles.heroContent}>
-            <Text style={styles.heroTitle}>Turn Your E-Waste Into Rewards</Text>
-            <Text style={styles.heroSubtitle}>
+          <View style={styles.content}>
+            
+            {/* Original Title & Subtitle */}
+            <Text style={styles.title}>Turn Your E-Waste Into Rewards</Text>
+            
+            <Text style={styles.subtitle}>
               Schedule a free pickup for your old electronics and earn points to redeem exciting coupons. 
               It's good for your wallet and the planet.
             </Text>
+
             <TouchableOpacity 
-              style={[sharedStyles.buttonSecondary, styles.ctaButton]} 
+              style={styles.ctaButton} 
               onPress={onScheduleClick}
-              activeOpacity={0.8}
+              activeOpacity={0.9}
             >
-              <Text style={sharedStyles.buttonTextSecondary}>📱 Schedule a Pickup Now</Text>
+              <Text style={styles.ctaText}>📱 Schedule a Pickup Now</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -41,56 +43,63 @@ export default function Hero({ onScheduleClick }: HeroProps) {
 }
 
 const styles = StyleSheet.create({
-  heroContainer: {
-    height: 350,
-    marginHorizontal: StyleConstants.spacing.md,
-    marginVertical: StyleConstants.spacing.md,
-    borderRadius: StyleConstants.borderRadius,
+  container: {
+    height: 480,
+    width: width,
+    marginBottom: 20,
+    borderBottomLeftRadius: 32,
+    borderBottomRightRadius: 32,
     overflow: 'hidden',
+    backgroundColor: '#000',
   },
   backgroundImage: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  imageStyle: {
-    borderRadius: StyleConstants.borderRadius,
+    width: '100%',
+    height: '100%',
   },
   overlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(46, 125, 50, 0.85)', // Green overlay
+    backgroundColor: 'rgba(46, 125, 50, 0.7)', // Green tint overlay
     justifyContent: 'center',
-    alignItems: 'center',
-    padding: StyleConstants.spacing.lg,
+    paddingHorizontal: 24,
+    paddingBottom: 40,
   },
-  heroContent: {
+  content: {
     alignItems: 'center',
-    maxWidth: 300,
   },
-  heroTitle: {
-    fontSize: StyleConstants.fontSize.xxl + 4,
-    fontWeight: StyleConstants.fontWeight.bold,
-    color: Colors.light.lightText,
+  title: {
+    fontSize: 36,
+    fontWeight: '800',
+    color: '#fff',
     textAlign: 'center',
-    marginBottom: StyleConstants.spacing.md,
+    marginBottom: 16,
     textShadowColor: 'rgba(0,0,0,0.3)',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 3,
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 4,
   },
-  heroSubtitle: {
-    fontSize: StyleConstants.fontSize.md,
+  subtitle: {
+    fontSize: 16,
     color: 'rgba(255,255,255,0.95)',
     textAlign: 'center',
-    lineHeight: 22,
-    marginBottom: StyleConstants.spacing.xl,
-    fontWeight: '300',
+    lineHeight: 24,
+    marginBottom: 32,
+    maxWidth: 320,
   },
   ctaButton: {
-    paddingHorizontal: StyleConstants.spacing.xl,
-    shadowColor: Colors.light.shadow,
+    backgroundColor: '#fff',
+    paddingVertical: 16,
+    paddingHorizontal: 32,
+    borderRadius: 100,
+    alignItems: 'center',
+    shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 6,
-    elevation: 4,
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  ctaText: {
+    color: Colors.light.primary,
+    fontSize: 16,
+    fontWeight: '700',
   },
 });

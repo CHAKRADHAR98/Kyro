@@ -1,4 +1,6 @@
 import Constants from 'expo-constants';
+import { Alert } from 'react-native';
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
 export interface AIVerificationResult {
   isVerified: boolean;
@@ -8,140 +10,99 @@ export interface AIVerificationResult {
 }
 
 export class AIService {
-  private static readonly GEMINI_API_KEY = Constants.expoConfig?.extra?.geminiApiKey;
-  private static readonly GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent';
+  private static readonly GEMINI_API_KEY = 
+    Constants.expoConfig?.extra?.geminiApiKey || 
+    process.env.EXPO_PUBLIC_GEMINI_API_KEY;
 
   static async verifyEWaste(
     base64Image: string, 
     expectedWasteType: string
   ): Promise<{ success: boolean; result?: AIVerificationResult; error?: string }> {
-    try {
-      if (!this.GEMINI_API_KEY) {
-        throw new Error('Gemini API key not configured');
-      }
-
-      const prompt = `
-        You are an e-waste verification assistant. Analyze this image and determine if it contains "${expectedWasteType}".
-        
-        Respond with ONLY a valid JSON object in this exact format:
-        {
-          "isVerified": boolean,
-          "detectedItems": ["item1", "item2"],
-          "confidence": number (0-100),
-          "reasoning": "brief explanation"
-        }
-        
-        Rules:
-        - isVerified: true only if you can clearly see items that match "${expectedWasteType}"
-        - detectedItems: list what e-waste items you can identify
-        - confidence: how confident you are (0-100)
-        - reasoning: brief explanation of your decision
-        
-        E-waste categories:
-        - Smartphones & Tablets: phones, tablets, mobile devices
-        - Laptops & Computers: laptops, desktops, keyboards, mice
-        - TVs & Monitors: televisions, computer monitors, displays
-        - Batteries & Power Banks: batteries, power banks, UPS
-        - Cables & Chargers: charging cables, adapters, power cables
-        - Other Small Appliances: small electronic devices, gadgets
-      `;
-
-      const requestBody = {
-        contents: [
-          {
-            parts: [
-              { text: prompt },
-              {
-                inline_data: {
-                  mime_type: "image/jpeg",
-                  data: base64Image
-                }
-              }
-            ]
-          }
-        ],
-        generationConfig: {
-          temperature: 0.1,
-          topK: 32,
-          topP: 1,
-          maxOutputTokens: 1024,
-        }
-      };
-
-      const response = await fetch(`${this.GEMINI_API_URL}?key=${this.GEMINI_API_KEY}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(requestBody),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Gemini API error: ${response.status} ${errorText}`);
-      }
-
-      const data = await response.json();
-      
-      if (!data.candidates || !data.candidates[0] || !data.candidates[0].content) {
-        throw new Error('Invalid response from Gemini API');
-      }
-
-      const textResponse = data.candidates[0].content.parts[0].text;
-      
-      // Try to parse JSON from the response
-      const jsonMatch = textResponse.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) {
-        throw new Error('No valid JSON found in AI response');
-      }
-
-      const result: AIVerificationResult = JSON.parse(jsonMatch[0]);
-      
-      // Validate the response structure
-      if (typeof result.isVerified !== 'boolean' || 
-          !Array.isArray(result.detectedItems) ||
-          typeof result.confidence !== 'number' ||
-          typeof result.reasoning !== 'string') {
-        throw new Error('Invalid AI response structure');
-      }
-
-      return { success: true, result };
-
-    } catch (error) {
-      console.error('AI Verification Error:', error);
-      
-      // Fallback for development/testing
-      if (__DEV__) {
-        console.log('Using fallback verification for development');
-        return {
-          success: true,
-          result: {
-            isVerified: Math.random() > 0.3, // 70% success rate for testing
-            detectedItems: [expectedWasteType],
-            confidence: Math.floor(Math.random() * 30) + 70, // 70-100% confidence
-            reasoning: 'Development mode: simulated verification'
-          }
-        };
-      }
-      
-      return { 
-        success: false, 
-        error: error instanceof Error ? error.message : 'AI verification failed' 
-      };
+    
+    if (!this.GEMINI_API_KEY) {
+      Alert.alert("Error", "API Key Missing in .env.local");
+      return { success: false, error: 'API Key missing' };
     }
+
+    // UPDATED: Using models explicitly found in your logs
+    const MODELS_TO_TRY = [
+      "gemini-2.5-flash",      // Found in your logs!
+      "gemini-flash-latest",   // Found in your logs!
+      "gemini-2.0-flash-001"   // Found in your logs!
+    ];
+
+    // Initialize SDK
+    const genAI = new GoogleGenerativeAI(this.GEMINI_API_KEY);
+
+    for (const modelName of MODELS_TO_TRY) {
+      try {
+        console.log(`📡 Attempting AI with model: ${modelName}...`);
+        
+        const model = genAI.getGenerativeModel({ model: modelName });
+
+        const prompt = `
+          You are an e-waste verification assistant. Analyze this image and determine if it contains "${expectedWasteType}".
+          
+          Respond with ONLY a valid JSON object in this exact format (no markdown):
+          {
+            "isVerified": boolean,
+            "detectedItems": ["item1", "item2"],
+            "confidence": number (0-100),
+            "reasoning": "brief explanation"
+          }
+        `;
+
+        const imagePart = {
+          inlineData: {
+            data: base64Image,
+            mimeType: "image/jpeg",
+          },
+        };
+
+        const result = await model.generateContent([prompt, imagePart]);
+        const response = await result.response;
+        const textResponse = response.text();
+
+        console.log(`✅ Success with ${modelName}!`);
+        // console.log("📝 Response:", textResponse.substring(0, 50) + "...");
+
+        // Clean and Parse JSON
+        const cleanJson = textResponse
+          .replace(/```json/g, '')
+          .replace(/```/g, '')
+          .trim();
+          
+        const parsedResult: AIVerificationResult = JSON.parse(cleanJson);
+        
+        return { success: true, result: parsedResult };
+
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
+        console.warn(`⚠️ Failed with ${modelName}`);
+        
+        // If this was the last model, throw the error
+        if (modelName === MODELS_TO_TRY[MODELS_TO_TRY.length - 1]) {
+           throw error;
+        }
+      }
+    }
+
+    return { success: false, error: "All models failed" };
   }
 
-  // Helper function to convert image URI to base64
   static async imageUriToBase64(uri: string): Promise<string> {
     try {
       const response = await fetch(uri);
       const blob = await response.blob();
-      
       return new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = () => {
-          const base64 = (reader.result as string).split(',')[1];
-          resolve(base64);
+          if (typeof reader.result === 'string') {
+            const base64 = reader.result.split(',')[1];
+            resolve(base64);
+          } else {
+            reject(new Error('Failed to convert blob to base64'));
+          }
         };
         reader.onerror = reject;
         reader.readAsDataURL(blob);

@@ -46,3 +46,4 @@ expo-env.d.ts
 .env
 .env.local
 
+app.json

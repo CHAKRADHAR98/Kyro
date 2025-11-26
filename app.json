@@ -40,17 +40,15 @@
       ]
     },
     "extra": {
-      "EXPO_PUBLIC_SUPABASE_URL": "your_supabase_url_here",
-        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "your_supabase_anon_key_here",
-        "SUPABASE_SERVICE_ROLE_KEY": "your_supabase_service_role_key_here",
-        "EXPO_PUBLIC_PRIVY_APP_ID": "your_privy_app_id_here",
-        "EXPO_PUBLIC_PRIVY_CLIENT_ID": "your_privy_client_id_here",
-        "EXPO_PUBLIC_PASSKEY_ASSOCIATED_DOMAIN": "your_passkey_domain_here",
-        "EXPO_PUBLIC_GEMINI_API_KEY": "your_gemini_api_key_here"
-      },
+      "privyAppId": "cmea18uo900csl80c6z5obyb1",
+      "privyClientId": "client-WY6PnvcfMUcMv3Fa8Ma3CxMKUfSNfptShSz82qmZk2o4s",
+      "passkeyAssociatedDomain": "",
+      "supabaseUrl": "https://wgcbdaebkezkiyyzsrzb.supabase.co",
+      "supabaseAnonKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndnY2JkYWVia2V6a2l5eXpzcnpiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTU1MTkyODEsImV4cCI6MjA3MTA5NTI4MX0.4AsrfKk6eST1Kn5yNJfJthX90YByUwUwEvNalzpN-pI",
       "router": {},
       "eas": {
-        "projectId": "your_project_id_here"
+        "projectId": "74c8a04b-39b1-4844-9965-2806a2937e88"
+      }
     },
     "plugins": [
       "expo-router",

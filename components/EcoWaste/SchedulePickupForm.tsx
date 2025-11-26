@@ -5,15 +5,24 @@ import {
   TextInput, 
   TouchableOpacity, 
   StyleSheet, 
-  Alert
+  Alert,
+  ActivityIndicator,
+  Image,
+  LayoutAnimation,
+  Platform,
+  UIManager
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
-import { createSharedStyles } from '../../shared/Styles';
-import { Colors, StyleConstants } from '../../constants/Colors';
+import { Ionicons } from '@expo/vector-icons';
+import { Colors } from '../../constants/Colors';
 import { DatabaseService } from '../../lib/database';
 import { AIService } from '../../lib/aiService';
 import { calculatePoints } from '../../lib/supabase';
 import { usePrivy } from '@privy-io/expo';
+
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 
 const EWASTE_CATEGORIES = [
   'Smartphones & Tablets',
@@ -23,11 +32,6 @@ const EWASTE_CATEGORIES = [
   'Cables & Chargers',
   'Other Small Appliances',
 ];
-
-interface Message {
-  type: 'success' | 'error' | 'info';
-  text: string;
-}
 
 export default function SchedulePickupForm() {
   const [formData, setFormData] = useState({
@@ -39,48 +43,11 @@ export default function SchedulePickupForm() {
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [message, setMessage] = useState<Message | null>(null);
   const [estimatedPoints, setEstimatedPoints] = useState<number>(0);
+  const [successMode, setSuccessMode] = useState(false);
 
-  const sharedStyles = createSharedStyles('light');
   const { user } = usePrivy();
 
-  // Get current user name (same logic as other components)
-  const getCurrentUserName = (): string => {
-    if (user?.linked_accounts) {
-      const emailAccount = user.linked_accounts.find(account => account.type === 'email');
-      if (emailAccount && 'address' in emailAccount && emailAccount.address) {
-        const email = emailAccount.address;
-        const namePart = email.split('@')[0];
-        
-        if (namePart.includes('.')) {
-          return namePart.split('.').map(part => 
-            part.charAt(0).toUpperCase() + part.slice(1).toLowerCase()
-          ).join(' ');
-        }
-        
-        return namePart.charAt(0).toUpperCase() + namePart.slice(1).toLowerCase();
-      }
-      
-      const firstAccount = user.linked_accounts[0];
-      if (firstAccount) {
-        if ('phoneNumber' in firstAccount && firstAccount.phoneNumber) return firstAccount.phoneNumber;
-        if ('username' in firstAccount && firstAccount.username) return firstAccount.username;
-        if ('custom_user_id' in firstAccount && firstAccount.custom_user_id) return firstAccount.custom_user_id;
-        if ('address' in firstAccount && firstAccount.address) return firstAccount.address;
-      }
-    }
-    
-    return 'Komati Chakradhar'; // Fallback to your database entry
-  };
-
-  // Auto-fill user name when component loads
-  React.useEffect(() => {
-    const userName = getCurrentUserName();
-    setFormData(prev => ({ ...prev, name: userName }));
-  }, [user]);
-
-  // Calculate points whenever category or weight changes
   React.useEffect(() => {
     const points = calculatePoints(formData.category, formData.weight);
     setEstimatedPoints(points);
@@ -92,300 +59,211 @@ export default function SchedulePickupForm() {
 
   const pickImage = useCallback(async () => {
     try {
-      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      
-      if (permissionResult.granted === false) {
-        Alert.alert('Permission Required', 'Permission to access camera roll is required!');
-        return;
-      }
-
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        mediaTypes: ['images'],
         allowsEditing: true,
         aspect: [4, 3],
-        quality: 0.8, // Reduce quality for faster upload
+        quality: 0.7,
       });
 
       if (!result.canceled && result.assets[0]) {
+        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
         setFormData(prev => ({ ...prev, photo: result.assets[0] }));
-        setMessage({ type: 'info', text: 'Photo selected. Ready for verification!' });
       }
     } catch (error) {
-      console.error('Error picking image:', error);
       Alert.alert('Error', 'Failed to pick image');
     }
   }, []);
 
-  const analyzeAndVerifyImage = useCallback(async (photoUri: string) => {
+  const analyzeAndVerifyImage = async (base64Image: string) => {
     setIsAnalyzing(true);
-    setMessage({ type: 'info', text: 'AI is verifying your e-waste... 🤖' });
-    
     try {
-      // Convert image to base64
-      const base64Image = await AIService.imageUriToBase64(photoUri);
-      
-      // Get AI verification
       const { success, result, error } = await AIService.verifyEWaste(
         base64Image, 
         formData.category
       );
       
-      if (!success || !result) {
-        throw new Error(error || 'AI verification failed');
-      }
-      
-      if (result.isVerified) {
-        setMessage({ 
-          type: 'success', 
-          text: `✅ Verification successful! Confidence: ${result.confidence}%` 
-        });
-        return { verified: true, aiResult: result };
-      } else {
-        setMessage({ 
-          type: 'error', 
-          text: `❌ Verification failed: ${result.reasoning}` 
-        });
-        return { verified: false, aiResult: result };
-      }
+      if (!success || !result) throw new Error(error || 'AI verification failed');
+      return { verified: result.isVerified, aiResult: result };
     } catch (error) {
-      console.error('Error during AI verification:', error);
-      setMessage({ 
-        type: 'error', 
-        text: 'AI verification failed. Please try again or contact support.' 
-      });
+      Alert.alert("AI Error", error instanceof Error ? error.message : "Unknown error");
       return { verified: false, aiResult: null };
     } finally {
       setIsAnalyzing(false);
     }
-  }, [formData.category]);
+  };
 
   const handleSubmit = useCallback(async () => {
-    // Validation
-    if (!formData.name.trim() || !formData.address.trim()) {
-      Alert.alert('Missing Information', 'Please fill in all required fields');
-      return;
-    }
-
-    if (!formData.photo) {
-      Alert.alert('Photo Required', 'Please upload a photo for verification');
+    if (!formData.name || !formData.address || !formData.photo) {
+      Alert.alert('Wait!', 'Please fill in all fields and add a photo.');
       return;
     }
 
     setIsSubmitting(true);
-    setMessage({ type: 'info', text: 'Processing your request...' });
 
     try {
-      // Step 1: Create pickup request in database
+      const base64Image = await AIService.imageUriToBase64(formData.photo.uri);
+      const imageUrl = await DatabaseService.uploadImage(base64Image);
+      
+      if (!imageUrl) throw new Error('Image upload failed');
+
       const createResult = await DatabaseService.createPickupRequest({
-        user_name: formData.name.trim(),
-        user_address: formData.address.trim(),
+        user_name: formData.name,
+        user_address: formData.address,
         waste_type: formData.category,
         quantity_kg: formData.weight,
+        image_url: imageUrl
       });
 
-      if (!createResult.success || !createResult.data) {
-        throw new Error(createResult.error || 'Failed to create pickup request');
-      }
+      if (!createResult.success || !createResult.data) throw new Error('Database error');
 
-      const pickupRequestId = createResult.data.id!;
+      const { verified, aiResult } = await analyzeAndVerifyImage(base64Image);
 
-      // Step 2: Verify image with AI
-      const { verified, aiResult } = await analyzeAndVerifyImage(formData.photo.uri);
-
-      // Step 3: Update pickup request with verification result
-      const updateResult = await DatabaseService.updatePickupVerification(
-        pickupRequestId,
+      await DatabaseService.updatePickupVerification(
+        createResult.data.id!,
         verified ? 'verified' : 'rejected',
         aiResult
       );
 
-      if (!updateResult.success) {
-        throw new Error(updateResult.error || 'Failed to update verification');
-      }
-
-      // Step 4: Show success message
       if (verified) {
-        setMessage({ 
-          type: 'success', 
-          text: `🎉 Success! Your pickup is scheduled and you've earned ${estimatedPoints} points!` 
-        });
-        
-        // Reset form
-        setFormData({
-          name: '',
-          address: '',
-          category: EWASTE_CATEGORIES[0],
-          weight: 5,
-          photo: null,
-        });
-        
-        Alert.alert(
-          'Pickup Scheduled!', 
-          `Your e-waste pickup has been verified and scheduled.\n\nPoints earned: ${estimatedPoints}\n\nWe will contact you shortly to arrange the pickup.`
-        );
+        LayoutAnimation.configureNext(LayoutAnimation.Presets.spring);
+        setSuccessMode(true);
       } else {
-        setMessage({ 
-          type: 'error', 
-          text: 'Verification failed. Your pickup request has been recorded but points will not be awarded until verification passes.' 
-        });
+        Alert.alert("Verification Failed", "The AI could not match the image to the category.");
       }
 
     } catch (error) {
-      console.error('Error submitting form:', error);
-      setMessage({ 
-        type: 'error', 
-        text: error instanceof Error ? error.message : 'Failed to submit request. Please try again.' 
-      });
+      Alert.alert('Error', 'Something went wrong.');
     } finally {
       setIsSubmitting(false);
     }
-  }, [formData, estimatedPoints, analyzeAndVerifyImage]);
+  }, [formData]);
 
-  const renderMessage = () => {
-    if (!message) return null;
-
-    const messageStyle = message.type === 'success' 
-      ? sharedStyles.messageSuccess 
-      : message.type === 'error' 
-      ? sharedStyles.messageError 
-      : sharedStyles.messageInfo;
-
-    const textStyle = message.type === 'success'
-      ? sharedStyles.messageTextSuccess
-      : message.type === 'error'
-      ? sharedStyles.messageTextError
-      : sharedStyles.messageTextInfo;
-
+  if (successMode) {
     return (
-      <View style={messageStyle}>
-        <Text style={textStyle}>{message.text}</Text>
+      <View style={styles.container}>
+        <View style={[styles.card, styles.successCard]}>
+          <View style={styles.successIcon}>
+            <Ionicons name="checkmark" size={40} color="white" />
+          </View>
+          <Text style={styles.successTitle}>Pickup Scheduled!</Text>
+          <Text style={styles.successText}>
+            You've earned <Text style={{fontWeight:'bold', color: Colors.light.primary}}>{estimatedPoints} Points</Text> pending pickup.
+          </Text>
+          <TouchableOpacity 
+            style={styles.resetButton}
+            onPress={() => {
+              setSuccessMode(false);
+              setFormData(prev => ({...prev, photo: null, address: ''}));
+            }}
+          >
+            <Text style={styles.resetText}>Schedule Another</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     );
-  };
+  }
 
   return (
     <View style={styles.container}>
-      <Text style={sharedStyles.title}>Schedule a Free Pickup</Text>
+      <Text style={styles.sectionTitle}>Schedule Pickup</Text>
       
-      <View style={[sharedStyles.cardElevated, styles.formCard]}>
-        {/* Name Input */}
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>Full Name *</Text>
-          <TextInput
-            style={[sharedStyles.input, styles.input]}
-            value={formData.name}
-            onChangeText={(value) => handleInputChange('name', value)}
-            placeholder="Enter your full name"
-            placeholderTextColor={Colors.light.placeholder}
-          />
-        </View>
-
-        {/* Address Input */}
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>Full Address *</Text>
-          <TextInput
-            style={[sharedStyles.input, styles.textArea]}
-            value={formData.address}
-            onChangeText={(value) => handleInputChange('address', value)}
-            placeholder="Enter your complete address"
-            placeholderTextColor={Colors.light.placeholder}
-            multiline
-            numberOfLines={3}
-            textAlignVertical="top"
-          />
-        </View>
-
-        {/* Category Picker */}
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>E-Waste Category</Text>
-          <TouchableOpacity 
-            style={[sharedStyles.input, styles.pickerContainer]}
-            onPress={() => {
-              Alert.alert(
-                'Select Category',
-                'Choose e-waste category',
-                EWASTE_CATEGORIES.map((cat) => ({
-                  text: cat,
-                  onPress: () => handleInputChange('category', cat)
-                }))
-              );
-            }}
-          >
-            <View style={styles.pickerButton}>
-              <Text style={styles.pickerText}>{formData.category}</Text>
-              <Text style={styles.pickerArrow}>▼</Text>
-            </View>
-          </TouchableOpacity>
-        </View>
+      <View style={styles.card}>
+        {/* Category Select */}
+        <TouchableOpacity 
+          style={styles.categorySelector}
+          onPress={() => {
+            Alert.alert('Select Category', '', EWASTE_CATEGORIES.map(cat => ({
+              text: cat, onPress: () => handleInputChange('category', cat)
+            })));
+          }}
+        >
+          <View>
+            <Text style={styles.label}>E-Waste Category</Text>
+            <Text style={styles.selectedValue}>{formData.category}</Text>
+          </View>
+          <Ionicons name="chevron-down" size={20} color="#666" />
+        </TouchableOpacity>
 
         {/* Weight Selection */}
         <View style={styles.inputGroup}>
-          <Text style={styles.label}>Estimated Weight: {formData.weight} kg</Text>
-          
-          <View style={styles.weightButtons}>
-            {[1, 5, 10, 15, 25, 50].map(weight => (
-              <TouchableOpacity
-                key={weight}
-                style={[
-                  styles.weightButton,
-                  formData.weight === weight && styles.weightButtonActive
-                ]}
-                onPress={() => handleInputChange('weight', weight)}
+          <Text style={styles.label}>Approx. Weight ({formData.weight} kg)</Text>
+          <View style={styles.weightRow}>
+            {[1, 5, 10, 15].map(w => (
+              <TouchableOpacity 
+                key={w} 
+                style={[styles.weightBtn, formData.weight === w && styles.weightBtnActive]}
+                onPress={() => handleInputChange('weight', w)}
               >
-                <Text style={[
-                  styles.weightButtonText,
-                  formData.weight === weight && styles.weightButtonTextActive
-                ]}>
-                  {weight}kg
-                </Text>
+                <Text style={[styles.weightText, formData.weight === w && styles.weightTextActive]}>{w}kg</Text>
               </TouchableOpacity>
             ))}
           </View>
         </View>
 
-        {/* Points Preview */}
-        <View style={styles.pointsPreview}>
-          <Text style={styles.pointsText}>
-            🏆 Estimated Points: {estimatedPoints}
-          </Text>
+        {/* Inputs */}
+        <View style={styles.inputContainer}>
+          <Ionicons name="person-outline" size={20} color="#999" style={styles.inputIcon} />
+          <TextInput
+            style={styles.input}
+            placeholder="Full Name"
+            value={formData.name}
+            onChangeText={(t) => handleInputChange('name', t)}
+          />
+        </View>
+
+        <View style={styles.inputContainer}>
+          <Ionicons name="location-outline" size={20} color="#999" style={styles.inputIcon} />
+          <TextInput
+            style={styles.input}
+            placeholder="Pickup Address"
+            value={formData.address}
+            onChangeText={(t) => handleInputChange('address', t)}
+            multiline
+          />
         </View>
 
         {/* Photo Upload */}
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>Upload Photo for Verification *</Text>
-          <TouchableOpacity 
-            style={styles.photoUploadButton} 
-            onPress={pickImage}
-            disabled={isAnalyzing || isSubmitting}
-          >
-            <Text style={styles.photoUploadText}>
-              {formData.photo 
-                ? `📷 Selected: ${formData.photo.fileName || 'Image'}` 
-                : '📷 Click to upload an image'
-              }
-            </Text>
-          </TouchableOpacity>
+        <TouchableOpacity style={styles.photoButton} onPress={pickImage}>
+          {formData.photo ? (
+            <Image source={{ uri: formData.photo.uri }} style={styles.previewImage} />
+          ) : (
+            <>
+              <View style={styles.photoIconCircle}>
+                <Ionicons name="camera" size={24} color={Colors.light.primary} />
+              </View>
+              <Text style={styles.photoText}>Tap to AI Verify Photo</Text>
+            </>
+          )}
+          {formData.photo && (
+            <View style={styles.changePhotoOverlay}>
+              <Ionicons name="refresh" size={20} color="white" />
+            </View>
+          )}
+        </TouchableOpacity>
+
+        {/* Points Badge */}
+        <View style={styles.pointsBadge}>
+          <Ionicons name="trophy" size={16} color="#F57C00" />
+          <Text style={styles.pointsText}>Est. Rewards: {estimatedPoints} pts</Text>
         </View>
 
-        {/* Message Display */}
-        {renderMessage()}
-
-        {/* Submit Button */}
-        <TouchableOpacity
-          style={[
-            sharedStyles.buttonPrimary,
-            (isSubmitting || isAnalyzing || !formData.photo) && sharedStyles.buttonDisabled
-          ]}
+        {/* Submit */}
+        <TouchableOpacity 
+          style={[styles.submitBtn, (isSubmitting || isAnalyzing) && styles.disabledBtn]}
           onPress={handleSubmit}
-          disabled={isSubmitting || isAnalyzing || !formData.photo}
+          disabled={isSubmitting || isAnalyzing}
         >
-          <Text style={sharedStyles.buttonTextPrimary}>
-            {isSubmitting 
-              ? '🕒 Processing...' 
-              : isAnalyzing 
-              ? '🤖 Analyzing...' 
-              : '📱 Request Pickup'}
-          </Text>
+          {isSubmitting || isAnalyzing ? (
+            <View style={{flexDirection: 'row', alignItems: 'center', gap: 10}}>
+              <ActivityIndicator color="white" />
+              <Text style={styles.submitText}>
+                {isAnalyzing ? "AI Verifying..." : "Uploading..."}
+              </Text>
+            </View>
+          ) : (
+            <Text style={styles.submitText}>Confirm Pickup Request</Text>
+          )}
         </TouchableOpacity>
       </View>
     </View>
@@ -394,100 +272,194 @@ export default function SchedulePickupForm() {
 
 const styles = StyleSheet.create({
   container: {
-    paddingHorizontal: StyleConstants.spacing.md,
-    marginVertical: StyleConstants.spacing.lg,
+    paddingHorizontal: 24,
+    marginBottom: 30,
   },
-  formCard: {
-    padding: StyleConstants.spacing.xl,
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#1a1a1a',
+    marginBottom: 16,
   },
-  inputGroup: {
-    marginBottom: StyleConstants.spacing.lg,
+  card: {
+    backgroundColor: 'white',
+    borderRadius: 24,
+    padding: 20,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 4,
   },
-  label: {
-    fontSize: StyleConstants.fontSize.md,
-    fontWeight: '500',
-    color: Colors.light.text,
-    marginBottom: StyleConstants.spacing.sm,
-  },
-  input: {
-    minHeight: 50,
-  },
-  textArea: {
-    minHeight: 80,
-    paddingTop: StyleConstants.spacing.md,
-  },
-  photoUploadButton: {
-    borderWidth: 2,
-    borderColor: Colors.light.secondary,
-    borderStyle: 'dashed',
-    borderRadius: StyleConstants.borderRadius,
-    padding: StyleConstants.spacing.xl,
-    alignItems: 'center',
-    backgroundColor: '#F0FFF0',
-  },
-  photoUploadText: {
-    fontSize: StyleConstants.fontSize.md,
-    color: Colors.light.secondary,
-    fontWeight: '500',
-  },
-  pickerContainer: {
-    paddingHorizontal: 0,
-    paddingVertical: 0,
-    justifyContent: 'center',
-  },
-  pickerButton: {
+  categorySelector: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: StyleConstants.spacing.md,
-    paddingVertical: StyleConstants.spacing.md,
+    padding: 16,
+    backgroundColor: '#F5F7FA',
+    borderRadius: 16,
+    marginBottom: 16,
   },
-  pickerText: {
-    fontSize: StyleConstants.fontSize.md,
-    color: Colors.light.text,
+  label: {
+    fontSize: 12,
+    color: '#666',
+    marginBottom: 4,
   },
-  pickerArrow: {
-    fontSize: StyleConstants.fontSize.sm,
-    color: Colors.light.placeholder,
+  selectedValue: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1a1a1a',
   },
-  weightButtons: {
+  weightRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: StyleConstants.spacing.sm,
-    marginTop: StyleConstants.spacing.md,
+    gap: 10,
+    marginBottom: 16,
   },
-  weightButton: {
-    paddingHorizontal: StyleConstants.spacing.md,
-    paddingVertical: StyleConstants.spacing.sm,
-    borderRadius: 20,
-    backgroundColor: Colors.light.border,
+  weightBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: Colors.light.border,
-    minWidth: 60,
+    borderColor: '#E0E0E0',
     alignItems: 'center',
   },
-  weightButtonActive: {
+  weightBtnActive: {
     backgroundColor: Colors.light.primary,
     borderColor: Colors.light.primary,
   },
-  weightButtonText: {
-    fontSize: StyleConstants.fontSize.sm,
-    color: Colors.light.text,
-    fontWeight: '500',
+  weightText: {
+    fontSize: 14,
+    color: '#666',
   },
-  weightButtonTextActive: {
-    color: Colors.light.lightText,
+  weightTextActive: {
+    color: 'white',
+    fontWeight: '600',
   },
-  pointsPreview: {
-    backgroundColor: 'rgba(76, 175, 80, 0.1)',
-    padding: StyleConstants.spacing.md,
-    borderRadius: StyleConstants.borderRadius,
-    marginBottom: StyleConstants.spacing.md,
+  inputContainer: {
+    flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E0E0E0',
+    marginBottom: 16,
+    paddingVertical: 8,
+  },
+  inputIcon: {
+    marginRight: 12,
+  },
+  input: {
+    flex: 1,
+    fontSize: 16,
+    color: '#333',
+    paddingVertical: 8,
+  },
+  photoButton: {
+    height: 140,
+    backgroundColor: '#F0F8F0',
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: '#C8E6C9',
+    borderStyle: 'dashed',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
+    overflow: 'hidden',
+  },
+  photoIconCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'white',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
+  photoText: {
+    color: Colors.light.primary,
+    fontWeight: '600',
+  },
+  previewImage: {
+    width: '100%',
+    height: '100%',
+  },
+  changePhotoOverlay: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    padding: 8,
+    borderRadius: 20,
+  },
+  pointsBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFF3E0',
+    paddingVertical: 8,
+    borderRadius: 8,
+    marginBottom: 16,
+    gap: 6,
   },
   pointsText: {
-    fontSize: StyleConstants.fontSize.lg,
-    fontWeight: StyleConstants.fontWeight.semibold,
-    color: Colors.light.primary,
+    color: '#F57C00',
+    fontWeight: '700',
+    fontSize: 14,
   },
+  submitBtn: {
+    backgroundColor: Colors.light.primary,
+    paddingVertical: 16,
+    borderRadius: 100,
+    alignItems: 'center',
+    shadowColor: Colors.light.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  disabledBtn: {
+    backgroundColor: '#A5D6A7',
+  },
+  submitText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  successCard: {
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  successIcon: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: Colors.light.success,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
+  },
+  successTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: Colors.light.success,
+    marginBottom: 10,
+  },
+  successText: {
+    fontSize: 16,
+    color: '#666',
+    textAlign: 'center',
+    marginBottom: 30,
+  },
+  resetButton: {
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 100,
+    backgroundColor: '#F5F5F5',
+  },
+  resetText: {
+    color: '#666',
+    fontWeight: '600',
+  },
+  inputGroup: {
+    marginBottom: 10,
+  }
 });
